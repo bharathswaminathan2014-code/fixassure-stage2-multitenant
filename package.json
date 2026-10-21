@@ -1,0 +1,42 @@
+{
+  "name": "incident-to-fix-assurance",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:client": "vite --host 127.0.0.1",
+    "build": "tsc -b && tsc --noEmit -p tsconfig.server.json && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "start:server": "tsx server/index.ts",
+    "dev:tenant-api": "tsx watch server/tenant-api.ts",
+    "migrate:tenant": "tsx server/migrate-tenant.ts",
+    "bootstrap:tenant": "tsx server/bootstrap-tenant.ts",
+    "build:tenant-api": "tsc --noEmit -p tsconfig.server.json"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^2.15.0",
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.5",
+    "@types/express": "^5.0.0",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "@types/node": "^22.15.30",
+    "@types/pg": "^8.11.10",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.7"
+  }
+}
