@@ -147,6 +147,12 @@ function Pill({children,kind="neutral"}:{children:React.ReactNode;kind?:string})
   return <span className={`pill ${kind}`}>{children}</span>;
 }
 function App() {
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [organizationSlug, setOrganizationSlug] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginStatus, setLoginStatus] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
   const [page,setPage] = useState("Overview");
   const [query,setQuery] = useState("");
   const [priority,setPriority] = useState("All priorities");
@@ -164,29 +170,65 @@ function App() {
   const [evidenceFocus,setEvidenceFocus] = useState(false);
 
   useEffect(() => {
+    if (!accessToken) {
+      setScoreStatus("Sign in to load organization scorecard settings");
+      return;
+    }
     let active = true;
-    fetch("/api/scorecard")
-      .then(async response => { if (!response.ok) throw new Error("API request failed"); return response.json(); })
+    fetch("/api/scorecard", { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(async response => { if (!response.ok) throw new Error(response.status === 401 ? "Session expired. Please sign in again." : "API request failed"); return response.json(); })
       .then(data => {
         if (!active) return;
         setScore({ precision: String(data.targets.precision), recall: String(data.targets.recall), traceability: String(data.targets.traceability), timeSaved: String(data.targets.timeSaved), actionable: String(data.targets.actionable) });
         setReviewed(Boolean(data.methodologyAgreed));
         setScoreUpdatedAt(data.updatedAt ?? null);
-        setScoreStatus("Saved targets loaded from local database");
+        setScoreStatus("Saved targets loaded from organization database");
       })
-      .catch(() => { if (active) setScoreStatus("API unavailable — start the app with npm run dev"); });
+      .catch(error => { if (active) setScoreStatus(error instanceof Error ? error.message : "Unable to load scorecard"); });
     return () => { active = false; };
-  }, []);
+  }, [accessToken]);
+
+  async function signIn(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginBusy(true);
+    setLoginStatus("");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationSlug: organizationSlug.trim().toLowerCase(), email: loginEmail.trim().toLowerCase(), password: loginPassword })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Sign in failed");
+      if (typeof data.accessToken !== "string" || !data.accessToken) throw new Error("The server did not return a valid session token");
+      setAccessToken(data.accessToken);
+      setLoginPassword("");
+      setLoginStatus("");
+    } catch (error) {
+      setLoginStatus(error instanceof Error ? error.message : "Unable to sign in. Please try again.");
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  function signOut() {
+    setAccessToken(null);
+    setLoginPassword("");
+    setPage("Overview");
+    setSelected(null);
+    setLoginStatus("You have signed out.");
+  }
 
   async function saveScorecard() {
     setScoreSaving(true);
     setScoreStatus("Saving…");
     try {
-      const response = await fetch("/api/scorecard", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targets: score, methodologyAgreed: reviewed }) });
+      if (!accessToken) throw new Error("Please sign in before saving.");
+      const response = await fetch("/api/scorecard", { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ targets: score, methodologyAgreed: reviewed }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Could not save scorecard");
       setScoreUpdatedAt(data.updatedAt ?? null);
-      setScoreStatus("Saved to local database");
+      setScoreStatus("Saved to organization database");
     } catch (error) {
       setScoreStatus(error instanceof Error ? error.message : "Could not save scorecard");
     } finally {
@@ -233,6 +275,19 @@ function App() {
 
   const header = (title:string,sub:string,action?:React.ReactNode)=><div className="page-heading"><div><h1>{title}</h1><p>{sub}</p></div>{action}</div>;
 
+  if (!accessToken) return <div style={{minHeight:"100vh",display:"grid",placeItems:"center",padding:24,background:"#f3f6f9",fontFamily:"Inter,system-ui,sans-serif",color:"#182b3a"}}>
+    <form onSubmit={signIn} style={{width:"100%",maxWidth:440,boxSizing:"border-box",background:"white",padding:32,borderRadius:18,border:"1px solid #dfe7ee",boxShadow:"0 18px 50px rgba(22,45,66,.09)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:26}}><div style={{width:44,height:44,borderRadius:12,display:"grid",placeItems:"center",background:"#e6f2f8",color:"#286b8a"}}><ShieldCheck size={24}/></div><div><strong style={{display:"block",fontSize:22}}>FixAssure</strong><span style={{fontSize:11,letterSpacing:1.2,color:"#6b7d8b"}}>IT OPERATIONS ASSURANCE</span></div></div>
+      <h1 style={{fontSize:25,margin:"0 0 8px"}}>Sign in to your workspace</h1><p style={{color:"#647686",fontSize:14,lineHeight:1.55,margin:"0 0 24px"}}>Use the organization slug and account credentials provided by your FixAssure administrator.</p>
+      <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:7}} htmlFor="org-slug">Organization slug</label><input id="org-slug" required autoComplete="organization" value={organizationSlug} onChange={e=>setOrganizationSlug(e.target.value)} placeholder="e.g. demo-enterprise" style={{width:"100%",boxSizing:"border-box",padding:"12px 13px",border:"1px solid #cad6df",borderRadius:9,marginBottom:16,fontSize:14}}/>
+      <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:7}} htmlFor="login-email">Email address</label><input id="login-email" required type="email" autoComplete="username" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} placeholder="you@company.com" style={{width:"100%",boxSizing:"border-box",padding:"12px 13px",border:"1px solid #cad6df",borderRadius:9,marginBottom:16,fontSize:14}}/>
+      <label style={{display:"block",fontSize:13,fontWeight:600,marginBottom:7}} htmlFor="login-password">Password</label><input id="login-password" required type="password" autoComplete="current-password" value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} style={{width:"100%",boxSizing:"border-box",padding:"12px 13px",border:"1px solid #cad6df",borderRadius:9,marginBottom:18,fontSize:14}}/>
+      {loginStatus&&<p role="alert" style={{fontSize:13,color:"#a32c2c",background:"#fff1f0",padding:10,borderRadius:8}}>{loginStatus}</p>}
+      <button type="submit" disabled={loginBusy} style={{width:"100%",border:0,borderRadius:9,padding:13,background:loginBusy?"#7d9eaf":"#226783",color:"white",fontSize:14,fontWeight:700,cursor:loginBusy?"wait":"pointer"}}>{loginBusy?"Signing in…":"Sign in securely"}</button>
+      <p style={{fontSize:12,color:"#748391",lineHeight:1.5,margin:"18px 0 0"}}>This prototype uses organization-scoped accounts. Demo dashboard records remain synthetic and are not loaded from a live ITSM system.</p>
+    </form>
+  </div>;
+
   return <div className="app-shell">
     <aside className={`sidebar ${menuOpen?"open":""}`}>
       <div className="brand">
@@ -241,7 +296,7 @@ function App() {
         <button className="mobile-close" onClick={()=>setMenuOpen(false)}><X size={18}/></button>
       </div>
       <div className="workspace-label">WORKSPACE</div>
-      <div className="workspace-switch"><div className="workspace-avatar">D</div><div><strong>Demo Enterprise</strong><span>Synthetic workspace</span></div><ChevronDown size={15}/></div>
+      <div className="workspace-switch"><div className="workspace-avatar">D</div><div><strong>{organizationSlug || "Organization workspace"}</strong><span>Authenticated workspace</span></div><ChevronDown size={15}/></div>
       <div className="nav-label">ASSURANCE</div>
       <nav>{nav.map(item=><button key={item.label} className={`nav-item ${page===item.label?"active":""}`} onClick={()=>go(item.label)}><item.icon size={18}/><span>{item.label}</span>{item.label==="Remediation Exceptions"&&<b className="nav-count">{exceptions.length}</b>}</button>)}</nav>
       <div className="sidebar-bottom">
@@ -255,7 +310,7 @@ function App() {
       <header className="topbar">
         <button className="mobile-menu" onClick={()=>setMenuOpen(true)}><Menu size={20}/></button>
         <div className="breadcrumb">Workspace <ChevronRight size={14}/> <strong>{page}</strong></div>
-        <div className="topbar-actions"><span className="status-dot"></span><span className="connected-label">Demo environment</span><button className="icon-button" aria-label="Notifications"><Bell size={18}/><i></i></button><div className="top-avatar">BS</div></div>
+        <div className="topbar-actions"><span className="status-dot"></span><span className="connected-label">Authenticated session</span><button className="btn secondary" onClick={signOut}>Sign out</button><div className="top-avatar">{loginEmail.slice(0,2).toUpperCase()}</div></div>
       </header>
       <div className="demo-banner"><span><LockKeyhole size={15}/><strong>SYNTHETIC DEMO DATA</strong></span><span>No live ITSM connection · No customer data · Demo analysis only</span></div>
       <div className="content">

@@ -10,6 +10,8 @@
     "build": "tsc -b && tsc --noEmit -p tsconfig.server.json && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "start:server": "tsx server/index.ts",
+    "start:tenant-api": "tsx server/tenant-api.ts",
+    "start": "npm run start:tenant-api",
     "dev:tenant-api": "tsx watch server/tenant-api.ts",
     "migrate:tenant": "tsx server/migrate-tenant.ts",
     "bootstrap:tenant": "tsx server/bootstrap-tenant.ts",
